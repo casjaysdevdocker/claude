@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+# - - - - - - - - - - - - - - - - - - - - - - - - -
+# Claude Code CLI wrapper with automatic screen session management
+# - - - - - - - - - - - - - - - - - - - - - - - - -
+# This wrapper transparently manages screen sessions for Claude Code CLI
+# When run interactively, it automatically attaches to or creates a screen session
+# - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Path to the real claude binary (installed by native installer)
+REAL_CLAUDE="/root/.local/bin/claude"
+SCREEN_SESSION_NAME="claude"
+
+# Check if real claude exists
+if [ ! -f "$REAL_CLAUDE" ]; then
+  echo "Error: Claude Code CLI not found at $REAL_CLAUDE" >&2
+  echo "Please ensure Claude Code is properly installed" >&2
+  exit 1
+fi
+
+# If not running in an interactive terminal, just pass through to real claude
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  exec "$REAL_CLAUDE" "$@"
+fi
+
+# Check if screen is available
+if ! command -v screen >/dev/null 2>&1; then
+  echo "Warning: screen not found, running claude directly" >&2
+  exec "$REAL_CLAUDE" "$@"
+fi
+
+# Check if a screen session named "claude" already exists
+if screen -list 2>/dev/null | grep -q "\.${SCREEN_SESSION_NAME}[[:space:]]"; then
+  # Session exists - attach to it
+  echo "Attaching to existing Claude screen session..."
+  echo "To detach: Ctrl+A then D"
+  echo ""
+  exec screen -r "$SCREEN_SESSION_NAME"
+else
+  # No session exists - create one
+  echo "Starting Claude in a new screen session..."
+  echo "To detach: Ctrl+A then D"
+  echo "To reattach: docker exec -it <container> claude"
+  echo ""
+  # Start claude in a new screen session
+  exec screen -S "$SCREEN_SESSION_NAME" -t claude "$REAL_CLAUDE" "$@"
+fi
