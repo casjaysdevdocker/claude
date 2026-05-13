@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-##@Version           :  202512161441-git
+##@Version           :  202602061352-git
 # @@Author           :  Jason Hempstead
 # @@Contact          :  jason@casjaysdev.pro
 # @@License          :  WTFPL
 # @@ReadME           :  entrypoint.sh --help
 # @@Copyright        :  Copyright: (c) 2026 Jason Hempstead, Casjays Developments
-# @@Created          :  Thursday, Jan 22, 2026 10:43 EST
+# @@Created          :  Tuesday, May 05, 2026 14:38 EDT
 # @@File             :  entrypoint.sh
 # @@Description      :  Entrypoint file for claude
 # @@Changelog        :  New script
@@ -21,56 +21,22 @@
 # shellcheck disable=SC1001,SC1003,SC2001,SC2003,SC2016,SC2031,SC2090,SC2115,SC2120,SC2155,SC2199,SC2229,SC2317,SC2329
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # run trap command on exit
-trap '__trap_exit_handler' EXIT
-trap '__trap_signal_handler' INT TERM PWR
-# - - - - - - - - - - - - - - - - - - - - - - - - -
-__trap_exit_handler() {
-  local retVal=$?
-  if [ "$SERVICE_IS_RUNNING" != "yes" ] && [ -f "$SERVICE_PID_FILE" ]; then
-    rm -Rf "$SERVICE_PID_FILE" 2>/dev/null || true
-  fi
-  exit $retVal
-}
-# - - - - - - - - - - - - - - - - - - - - - - - - -
-__trap_signal_handler() {
-  local retVal=$?
-  echo "Container received shutdown signal"
-  if [ "$SERVICE_IS_RUNNING" != "yes" ] && [ -f "$SERVICE_PID_FILE" ]; then
-    rm -Rf "$SERVICE_PID_FILE" 2>/dev/null || true
-  fi
-  exit $retVal
-}
+trap 'retVal=$?;[ "$SERVICE_IS_RUNNING" != "yes" ] && [ -f "$SERVICE_PID_FILE" ] && rm -Rf "$SERVICE_PID_FILE";exit $retVal' INT TERM PWR
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # setup debugging - https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
-if [ -f "/config/.debug" ] && [ -z "$DEBUGGER_OPTIONS" ]; then
-  export DEBUGGER_OPTIONS="$(<"/config/.debug")"
-else
-  DEBUGGER_OPTIONS="${DEBUGGER_OPTIONS:-}"
-fi
-if [ "$DEBUGGER" = "on" ] || [ -f "/config/.debug" ]; then
-  echo "Enabling debugging"
-  set -o pipefail -x$DEBUGGER_OPTIONS
-  export DEBUGGER="on"
-else
-  set -o pipefail
-fi
+[ -f "/config/.debug" ] && [ -z "$DEBUGGER_OPTIONS" ] && export DEBUGGER_OPTIONS="$(<"/config/.debug")" || DEBUGGER_OPTIONS="${DEBUGGER_OPTIONS:-}"
+{ [ "$DEBUGGER" = "on" ] || [ -f "/config/.debug" ]; } && echo "Enabling debugging" && set -o pipefail -x$DEBUGGER_OPTIONS && export DEBUGGER="on" || set -o pipefail
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-PATH="/usr/local/bin:/usr/local/etc/docker/bin:/root/.local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
+PATH="/usr/local/etc/docker/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Set bash options
 SCRIPT_FILE="$0"
 CONTAINER_NAME="claude"
-SCRIPT_NAME="$(basename -- "$SCRIPT_FILE" 2>/dev/null)"
+SCRIPT_NAME="${SCRIPT_FILE##*/}"
 CONTAINER_NAME="${ENV_CONTAINER_NAME:-$CONTAINER_NAME}"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # remove whitespaces from beginning argument
-while :; do
-  if [ "$1" = " " ]; then
-    shift 1
-  else
-    break
-  fi
-done
+while :; do [ "$1" = " " ] && shift 1 || break; done
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 [ "$1" = "$SCRIPT_FILE" ] && shift 1
 [ "$1" = "$SCRIPT_NAME" ] && shift 1
@@ -110,19 +76,15 @@ unset set_env
 # normally root
 RUNAS_USER="root"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-# Set user and group ID from PUID/PGID env variables
-# PUID/PGID are numeric IDs, not usernames
-SERVICE_UID="${PUID:-${SERVICE_UID:-0}}"
-SERVICE_GID="${PGID:-${SERVICE_GID:-0}}"
+# Set user and group from env
+SERVICE_USER="${PUID:-$SERVICE_USER}"
+SERVICE_GROUP="${PGID:-$SERVICE_GROUP}"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-# Set user and group names (only if not running as root)
-if [ "$SERVICE_UID" != "0" ] && [ "$SERVICE_GID" != "0" ]; then
-  SERVICE_USER="${SERVICE_USER:-claude}"
-  SERVICE_GROUP="${SERVICE_GROUP:-claude}"
-else
-  SERVICE_USER="root"
-  SERVICE_GROUP="root"
-fi
+# Set user and group ID
+# set the user id
+SERVICE_UID="${SERVICE_UID:-0}"
+# set the group id
+SERVICE_GID="${SERVICE_GID:-0}"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # User and group in which the service switches to - IE: nginx,apache,mysql,postgres
 #SERVICE_USER="${SERVICE_USER:-claude}"   # execute command as another user
@@ -148,18 +110,11 @@ HEALTH_ENDPOINTS=""
 export PATH RUNAS_USER SERVICE_USER SERVICE_GROUP SERVICE_UID SERVICE_GID WWW_ROOT_DIR DATABASE_DIR
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Custom variables
-CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/config/claude}"
-CLAUDE_SETTINGS_FILE="${CLAUDE_SETTINGS_FILE:-$CLAUDE_CONFIG_DIR/settings.json}"
-CLAUDE_WORK_DIR="${CLAUDE_WORK_DIR:-${PWD:-/app}}"
-CLAUDE_ADDITIONAL_ARGS="${CLAUDE_ADDITIONAL_ARGS:-}"
+
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # show message
 __run_message() {
-  if [ "$ENTRYPOINT_MESSAGE" = "yes" ]; then
-    echo "Claude Code CLI is ready"
-    echo "Settings: $CLAUDE_SETTINGS_FILE"
-    echo "Working directory: $CLAUDE_WORK_DIR"
-  fi
+
   return
 }
 # - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -215,7 +170,7 @@ export ENTRYPOINT_DATA_INIT_FILE="${ENTRYPOINT_DATA_INIT_FILE:-/data/.docker_has
 export ENTRYPOINT_CONFIG_INIT_FILE="${ENTRYPOINT_CONFIG_INIT_FILE:-/config/.docker_has_run}"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 if [ -n "$CONTAINER_WEB_SERVER_WWW_REPO" ]; then
-  www_temp_dir="/tmp/git/$(basename -- "$CONTAINER_WEB_SERVER_WWW_REPO")"
+  www_temp_dir="/tmp/git/${CONTAINER_WEB_SERVER_WWW_REPO##*/}"
   rm -Rf "${WWW_ROOT_DIR:?}"/* "${www_temp_dir:?}"/* 2>/dev/null || true
   mkdir -p "$WWW_ROOT_DIR" "$www_temp_dir" 2>/dev/null || true
   git clone -q "$CONTAINER_WEB_SERVER_WWW_REPO" "$www_temp_dir" 2>/dev/null || true
@@ -278,7 +233,6 @@ mkdir -p "/root" 2>/dev/null || true
 mkdir -p "/var/run" 2>/dev/null || true
 mkdir -p "/var/tmp" 2>/dev/null || true
 mkdir -p "/run/cron" 2>/dev/null || true
-mkdir -p "/app" 2>/dev/null || true
 mkdir -p "/data/logs" 2>/dev/null || true
 mkdir -p "/run/init.d" 2>/dev/null || true
 mkdir -p "/config/enable" 2>/dev/null || true
@@ -413,7 +367,7 @@ if [ "$ENTRYPOINT_FIRST_RUN" != "no" ]; then
   # - - - - - - - - - - - - - - - - - - - - - - - - -
   # import hosts file into container
   if [ -f "/usr/local/etc/hosts" ] && [ "$UPDATE_FILE_HOSTS" = "yes" ]; then
-    cat "/usr/local/etc/hosts" 2>/dev/null | grep -vF "$HOSTNAME" >>"/etc/hosts" 2>/dev/null || true
+    grep -vF "$HOSTNAME" "/usr/local/etc/hosts" 2>/dev/null >>"/etc/hosts" 2>/dev/null || true
   fi
   # - - - - - - - - - - - - - - - - - - - - - - - - -
   # import resolv.conf file into container
@@ -487,26 +441,30 @@ fi
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # if no pid assume container restart - clean stale files on restart
 if [ -f "$ENTRYPOINT_PID_FILE" ]; then
-  START_SERVICES="no"
-  touch "$ENTRYPOINT_PID_FILE"
+  # Check if the PID in the file is still running
+  entrypoint_pid=$(cat "$ENTRYPOINT_PID_FILE" 2>/dev/null || echo "")
+  if [ -n "$entrypoint_pid" ] && kill -0 "$entrypoint_pid" 2>/dev/null; then
+    # Process is still running, don't restart services
+    START_SERVICES="no"
+    touch "$ENTRYPOINT_PID_FILE"
+  else
+    # PID file exists but process is dead - this is a restart
+    START_SERVICES="yes"
+    # Clean any stale PID files on restart
+    rm -f /run/__start_init_scripts.pid /run/init.d/*.pid /run/*.pid 2>/dev/null || true
+  fi
 else
   START_SERVICES=yes
   # Clean any stale PID files on first run
-  rm -f /run/.start_init_scripts.pid /run/init.d/*.pid /run/*.pid 2>/dev/null || true
+  rm -f /run/__start_init_scripts.pid /run/init.d/*.pid /run/*.pid 2>/dev/null || true
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-if [ "$ENTRYPOINT_MESSAGE" = "yes" ]; then
-  __printf_space "40" "The containers ip address is:" "$CONTAINER_IP4_ADDRESS"
-fi
+[ "$ENTRYPOINT_MESSAGE" = "yes" ] && __printf_space "40" "The containers ip address is:" "$CONTAINER_IP4_ADDRESS"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Show configured listing processes
 if [ "$ENTRYPOINT_MESSAGE" = "yes" ] && [ -n "$ENV_PORTS" ]; then
   show_port=""
-  for port in $ENV_PORTS; do
-    if [ -n "$port" ]; then
-      show_port+="$(printf '%s ' "${port// /}") "
-    fi
-  done
+  for port in $ENV_PORTS; do [ -n "$port" ] && show_port+="$(printf '%s ' "${port// /}") "; done
   __printf_space "40" "The following ports are open:" "$show_port"
   unset port show_port
 fi
@@ -519,15 +477,6 @@ __create_service_user "$SERVICE_USER" "$SERVICE_GROUP" "${WORK_DIR:-/home/$SERVI
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Modify user if needed
 __set_user_group_id $SERVICE_USER ${SERVICE_UID:-} ${SERVICE_GID:-}
-# - - - - - - - - - - - - - - - - - - - - - - - - -
-# Fix permissions on mounted directories for PUID/PGID
-if [ "$SERVICE_UID" != "0" ] && [ "$SERVICE_GID" != "0" ] && [ "$SERVICE_USER" != "root" ]; then
-  echo "Applying PUID/PGID permissions: $SERVICE_USER:$SERVICE_GROUP ($SERVICE_UID:$SERVICE_GID)"
-  # Define directories that need permission changes
-  APPLICATION_DIRS="/config /data ${CLAUDE_WORK_DIR}"
-  # Fix ownership on mounted directories
-  __fix_permissions "$SERVICE_USER" "$SERVICE_GROUP"
-fi
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Show message
 __run_message
@@ -550,6 +499,9 @@ if [ "$START_SERVICES" = "yes" ] || [ -z "$1" ]; then
     echo "$$" >"$ENTRYPOINT_PID_FILE"
     __start_init_scripts "/usr/local/etc/docker/init.d"
     CONTAINER_INIT="${CONTAINER_INIT:-no}"
+    # Services started successfully - enter monitoring mode
+    __no_exit
+    exit $?
   fi
   START_SERVICES="no"
 fi
@@ -559,7 +511,7 @@ export START_SERVICES CONTAINER_INIT ENTRYPOINT_PID_FILE
 case "$1" in
 init)
   shift 1
-  echo "Container has been Initialized"
+  __log_info "Container has been initialized"
   exit 0
   ;;
 tail)
@@ -590,7 +542,7 @@ logs)
   clean)
     log_files="$(find "/data/logs" -type f)"
     for log in "${log_files[@]}"; do
-      echo "clearing $log"
+      __log_info "Clearing log file: $log"
       printf '' >$log
     done
     ;;
@@ -603,7 +555,7 @@ logs)
 cron)
   shift 1
   __cron "$@" &
-  echo "cron script is running with pid: $!"
+  __log_info "Cron script is running with PID: $!"
   exit
   ;;
 # backup data and config dirs
@@ -631,7 +583,7 @@ healthcheck)
     [ "$healthEnabled" = "yes" ] || exit 0
     if [ -d "/run/healthcheck" ] && [ "$(ls -A "/run/healthcheck" | wc -l)" -ne 0 ]; then
       for service in /run/healthcheck/*; do
-        name=$(basename -- $service)
+        name="${service##*/}"
         services+="$name "
       done
     fi
@@ -719,11 +671,7 @@ start)
   export PATH="/usr/local/etc/docker/init.d:$PATH"
   if [ $# -eq 0 ]; then
     scripts="$(ls -A "/usr/local/etc/docker/init.d")"
-    if [ -n "$scripts" ]; then
-      echo "$scripts"
-    else
-      echo "No scripts found in: /usr/local/etc/docker/init.d"
-    fi
+    [ -n "$scripts" ] && echo "$scripts" || echo "No scripts found in: /usr/local/etc/docker/init.d"
     exit
   elif [ "$1" = "all" ]; then
     shift $#
@@ -742,11 +690,7 @@ start)
   if [ $# -eq 0 ]; then
     if [ ! -f "$ENTRYPOINT_PID_FILE" ]; then
       echo "$$" >"$ENTRYPOINT_PID_FILE"
-      if [ "$START_SERVICES" = "no" ] && [ "$CONTAINER_INIT" = "yes" ]; then
-        :
-      else
-        __start_init_scripts "/usr/local/etc/docker/init.d"
-      fi
+      [ "$START_SERVICES" = "no" ] && [ "$CONTAINER_INIT" = "yes" ] || __start_init_scripts "/usr/local/etc/docker/init.d"
     fi
     __no_exit
   else

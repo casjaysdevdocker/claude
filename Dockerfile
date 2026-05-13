@@ -76,7 +76,13 @@ RUN set -e; \
 
 RUN set -e; \
   echo "Setting up prerequisites"; \
-  true
+  apk --no-cache add bash; \
+  SH_CMD="$(which sh 2>/dev/null||command -v sh 2>/dev/null)"; \
+  BASH_CMD="$(which bash 2>/dev/null||command -v bash 2>/dev/null)"; \
+  [ -x "$BASH_CMD" ] && symlink "$BASH_CMD" "/bin/sh" || true; \
+  [ -x "$BASH_CMD" ] && symlink "$BASH_CMD" "/usr/bin/sh" || true; \
+  [ -x "$BASH_CMD" ] && [ "$SH_CMD" != "/bin/sh" ] && symlink "$BASH_CMD" "$SH_CMD" || true; \
+  [ -n "$BASH_CMD" ] && sed -i 's|root:x:.*|root:x:0:0:root:/root:'$BASH_CMD'|g' "/etc/passwd" || true
 
 ENV SHELL="/bin/bash"
 SHELL [ "/bin/bash", "-c" ]
@@ -91,7 +97,12 @@ RUN echo "Initializing the system"; \
 
 RUN echo "Creating and editing system files "; \
   $SHELL_OPTS; \
-  [ -f "/root/.profile" ] || touch "/root/.profile"; \
+  rm -Rf "/etc/apk/repositories"; \
+  [ "$DISTRO_VERSION" = "latest" ] && DISTRO_VERSION="edge";[ "$DISTRO_VERSION" = "edge" ] || DISTRO_VERSION="v${DISTRO_VERSION}"; \
+  echo "http://dl-cdn.alpinelinux.org/alpine/${DISTRO_VERSION}/main" >>"/etc/apk/repositories"; \
+  echo "http://dl-cdn.alpinelinux.org/alpine/${DISTRO_VERSION}/community" >>"/etc/apk/repositories"; \
+  if [ "${DISTRO_VERSION}" = "edge" ]; then echo "http://dl-cdn.alpinelinux.org/alpine/${DISTRO_VERSION}/testing" >>"/etc/apk/repositories";fi; \
+  apk update; apk upgrade --no-cache; \
   if [ -f "/root/docker/setup/01-system.sh" ];then echo "Running the system script";/root/docker/setup/01-system.sh||{ echo "Failed to execute /root/docker/setup/01-system.sh" >&2 && exit 10; };echo "Done running the system script";fi; \
   echo ""
 
@@ -118,7 +129,7 @@ RUN echo "Updating system files "; \
   echo 'hosts: files dns' >"/etc/nsswitch.conf"; \
   [ "$PHP_VERSION" = "system" ] && PHP_VERSION="php" || true; \
   PHP_BIN="$(command -v ${PHP_VERSION} 2>/dev/null || true)"; \
-  PHP_FPM="$(ls /usr/*bin/php*fpm* 2>/dev/null || true)"; \
+  set -- /usr/*bin/php*fpm*; [ -e "$1" ] && PHP_FPM="$1" || PHP_FPM=""; \
   pip_bin="$(command -v python3 2>/dev/null || command -v python2 2>/dev/null || command -v python 2>/dev/null || true)"; \
   py_version="$(command $pip_bin --version | sed 's|[pP]ython ||g' | awk -F '.' '{print $1$2}' | grep '[0-9]' || true)"; \
   [ "$py_version" -gt "310" ] && pip_opts="--break-system-packages " || pip_opts=""; \
@@ -135,7 +146,7 @@ RUN echo "Updating system files "; \
 
 RUN echo "Custom Settings"; \
   $SHELL_OPTS; \
-echo ""
+  echo ""
 
 RUN echo "Setting up users and scripts "; \
   $SHELL_OPTS; \
@@ -152,12 +163,7 @@ RUN echo "Setting OS Settings "; \
 
 RUN echo "Custom Applications"; \
   $SHELL_OPTS; \
-  echo "Installing Claude Code CLI via native installer"; \
-  curl -fsSL https://claude.ai/install.sh | bash || { echo "Failed to install Claude Code CLI" >&2 && exit 10; }; \
-  echo "Configuring Docker"; \
-  mkdir -p /etc/docker; \
-  echo '{"storage-driver":"vfs"}' > /etc/docker/daemon.json; \
-echo ""
+  echo ""
 
 RUN echo "Running custom commands"; \
   if [ -f "/root/docker/setup/05-custom.sh" ];then echo "Running the custom script";/root/docker/setup/05-custom.sh||{ echo "Failed to execute /root/docker/setup/05-custom.sh" && exit 10; };echo "Done running the custom script";fi; \
@@ -180,7 +186,7 @@ RUN echo "Deleting unneeded files"; \
   rm -rf /lib/systemd/system/sockets.target.wants/*udev* || true; \
   rm -rf /lib/systemd/system/sockets.target.wants/*initctl* || true; \
   rm -Rf /usr/share/doc/* /var/tmp/* /var/cache/*/* /root/.cache/* /usr/share/info/* /tmp/* || true; \
-  if [ -d "/lib/systemd/system/sysinit.target.wants" ];then cd "/lib/systemd/system/sysinit.target.wants" && rm -f $(ls | grep -v systemd-tmpfiles-setup);fi; \
+  if [ -d "/lib/systemd/system/sysinit.target.wants" ];then cd "/lib/systemd/system/sysinit.target.wants" && for want_file in *; do [ "$want_file" = "systemd-tmpfiles-setup" ] || rm -f "$want_file"; done; fi; \
   if [ -f "/root/docker/setup/07-cleanup.sh" ];then echo "Running the cleanup script";/root/docker/setup/07-cleanup.sh||{ echo "Failed to execute /root/docker/setup/07-cleanup.sh" >&2 && exit 10; };echo "Done running the cleanup script";fi; \
   echo ""
 
@@ -224,8 +230,8 @@ LABEL org.opencontainers.image.authors="${LICENSE}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.version="${BUILD_VERSION}"
 LABEL org.opencontainers.image.schema-version="${BUILD_VERSION}"
-LABEL org.opencontainers.image.url="https://hub.docker.com/casjaysdevdocker/claude"
-LABEL org.opencontainers.image.source="https://hub.docker.com/casjaysdevdocker/claude"
+LABEL org.opencontainers.image.url="https://docker.io/casjaysdevdocker/claude"
+LABEL org.opencontainers.image.source="https://docker.io/casjaysdevdocker/claude"
 LABEL org.opencontainers.image.vcs-type="Git"
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 LABEL org.opencontainers.image.source="https://github.com/casjaysdevdocker/claude"
@@ -234,7 +240,7 @@ LABEL com.github.containers.toolbox="false"
 
 ENV ENV=~/.bashrc
 ENV USER="${USER}"
-ENV PATH="/usr/local/bin:/root/.local/bin:${PATH}"
+ENV PATH="${PATH}"
 ENV TZ="${TIMEZONE}"
 ENV SHELL="/bin/bash"
 ENV TIMEZONE="${TZ}"
@@ -250,11 +256,10 @@ ENV NODE_MANAGER="${NODE_MANAGER}"
 ENV PHP_VERSION="${PHP_VERSION}"
 ENV DISTRO_VERSION="${IMAGE_VERSION}"
 ENV WWW_ROOT_DIR="${WWW_ROOT_DIR}"
-ENV USE_BUILTIN_RIPGREP="0"
 
 COPY --from=build /. /
 
-VOLUME [ "/config","/app","/data" ]
+VOLUME [ "/config","/data" ]
 
 EXPOSE ${SERVICE_PORT} ${ENV_PORTS}
 
@@ -262,3 +267,4 @@ STOPSIGNAL SIGRTMIN+3
 
 ENTRYPOINT [ "tini", "-p", "SIGTERM","--", "/usr/local/bin/entrypoint.sh" ]
 HEALTHCHECK --start-period=10m --interval=5m --timeout=15s CMD [ "/usr/local/bin/entrypoint.sh", "healthcheck" ]
+
