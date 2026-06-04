@@ -18,7 +18,7 @@
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # shellcheck disable=SC1001,SC1003,SC2001,SC2003,SC2016,SC2031,SC2090,SC2115,SC2120,SC2155,SC2199,SC2229,SC2317,SC2329
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-SCRIPT_NAME="$(basename "$0" 2>/dev/null)"
+SCRIPT_NAME="${0##*/}"
 SCRIPT_PID_FILE="/run/init.d/$SCRIPT_NAME.pid"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Set env/config variables
@@ -45,9 +45,9 @@ mkdir -p "$CLAUDE_CONFIG_DIR" 2>/dev/null || true
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Initialize settings.json if it doesn't exist
 if [ ! -f "$CLAUDE_SETTINGS_FILE" ]; then
-  if [ -f "/usr/local/share/template-files/config/claude/settings.json" ]; then
+  if [ -f "/etc/claude/settings.json" ]; then
     echo "Initializing Claude Code settings from template"
-    cp -f "/usr/local/share/template-files/config/claude/settings.json" "$CLAUDE_SETTINGS_FILE"
+    cp -f "/etc/claude/settings.json" "$CLAUDE_SETTINGS_FILE"
   fi
 fi
 # - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -18,7 +18,7 @@
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # shellcheck disable=SC1001,SC1003,SC2001,SC2003,SC2016,SC2031,SC2090,SC2115,SC2120,SC2155,SC2199,SC2229,SC2317,SC2329
 # - - - - - - - - - - - - - - - - - - - - - - - - -
-SCRIPT_NAME="$(basename "$0" 2>/dev/null)"
+SCRIPT_NAME="${0##*/}"
 SCRIPT_PID_FILE="/run/init.d/$SCRIPT_NAME.pid"
 # - - - - - - - - - - - - - - - - - - - - - - - - -
 # Set env/config variables
